@@ -18,6 +18,7 @@
                  version="1.0"> 
 
   <xsl:import href="common.xsl" />
+  <xsl:import href="params.xsl" />
 
   <!-- default uri for atom feed -->
   <xsl:param name="default.feed.uri" select="'http://picasaweb.google.com/data/feed/api/user/tester'" />
@@ -39,8 +40,8 @@
     <xsl:text>kind=photo</xsl:text>
     <xsl:text>&amp;start-index=1</xsl:text>
     <xsl:text>&amp;max-results=3</xsl:text>
-    <xsl:text>&amp;mgmax=800</xsl:text>
-    <xsl:text>&amp;thumbsize=144c,160c,320,400</xsl:text>
+    <xsl:text>&amp;imgmax=800</xsl:text>
+    <xsl:text>&amp;thumbsize=144c,160c,320,400,720,1024</xsl:text>
   </xsl:param>
 
   <xsl:param name="default.newsfeed.params">
@@ -49,12 +50,12 @@
     <xsl:text>&amp;start-index=1</xsl:text>
     <xsl:text>&amp;max-results=3</xsl:text>
     <xsl:text>&amp;imgmax=800</xsl:text>
-    <xsl:text>&amp;thumbsize=48c,144c,160c,320,400</xsl:text>
+    <xsl:text>&amp;thumbsize=48c,144c,160c,320,400,720,1024</xsl:text>
   </xsl:param>
 
 
   <xsl:template name="smooth-gallery-head">
-    <xsl:if test="count(key('gallery-script-dependancies', 'all')[1]) = 1">
+    <xsl:if test="count(key('gallery-script-dependencies', 'all')[1]) = 1">
       <!-- more mootools scripts -->
       <xsl:call-template name="local-script">
         <xsl:with-param name="src" select="'scripts/mootools-1.2-more.js'" />
@@ -88,10 +89,9 @@
     <!-- these parameters are passed through to the
          `smooth-gallery-photos' template -->
     <xsl:param name="gallery.feed" />
-    <xsl:param name="gallery.width" />
-    <xsl:param name="full.photo.width" />
-    <xsl:param name="thumbnail.width" />
-    <xsl:param name="embed.links" />
+    <xsl:param name="gallery.width" select="$gallery.width" />
+    <xsl:param name="full.photo.width" select="$full.photo.width" />
+    <xsl:param name="thumbnail.width" select="$thumbnail.width" />
 
     <!-- Script with custom settings to start Smooth Gallery. -->
     <script type="text/javascript" language="JavaScript">
@@ -128,7 +128,7 @@
   </xsl:template>
 
 
-  <!-- process photos for smooth gallery -->
+  <!-- Process photos for smooth gallery. -->
   <xsl:template name="smooth-gallery-photos">
     <xsl:param name="gallery.width" select="720" />
     <xsl:param name="full.photo.width" select="1024" />
@@ -149,8 +149,24 @@
       <xsl:value-of select="document ($default.photo.feed)" />
     </xsl:param>
 
+    <xsl:message>
+      <xsl:text>Feed: </xsl:text>
+      <xsl:value-of select="concat($default.feed.uri,$default.photo.params)" />
+      <xsl:text>
+</xsl:text>
+      <xsl:text>gallery.width: </xsl:text>
+      <xsl:value-of select="$gallery.width" />
+      <xsl:text>
+</xsl:text>
+      <xsl:text>Number of entries: </xsl:text>
+      <xsl:value-of select="count($feed/atom:feed/atom:entry[atom:category/@term=$term.photo]/media:group/media:thumbnail/@width[.=$gallery.width or .=$full.photo.width]/ancestor::atom:entry)" />
+    </xsl:message>
+
+
+    
+    <!-- transform ATOM entry's which contain photos of certain width's -->
     <xsl:apply-templates 
-        select="$feed/atom:feed/atom:entry[atom:category/@term='http://schemas.google.com/photos/2007#photo']/media:group/media:thumbnail/@width[.=$gallery.width or .=$full.photo.width]/ancestor::atom:entry" 
+        select="$feed/atom:feed/atom:entry[atom:category/@term=$term.photo]/media:group/media:thumbnail/@width[.=$gallery.width or .=$full.photo.width]/ancestor::atom:entry" 
         mode="smooth-gallery">
       <xsl:with-param name="gallery.width" select="$gallery.width" />
       <xsl:with-param name="full.photo.width" select="$full.photo.width" />
@@ -161,7 +177,7 @@
     </xsl:apply-templates>
   </xsl:template>
 
-  <!-- transform photo entries (not albums or tags for example) -->
+  <!-- Transform photo entries (not albums or tags for example). -->
   <xsl:template match="atom:entry[atom:category/@term='http://schemas.google.com/photos/2007#photo']"
                 mode="smooth-gallery">
     <xsl:param name="gallery.width"  />
@@ -173,10 +189,10 @@
 
     <xsl:variable name="class.value">
       <xsl:text>entry</xsl:text>
-      <xsl:if test="not(preceding-sibling::atom:entry[atom:category/@term='http://schemas.google.com/photos/2007#photo'])">
+      <xsl:if test="not(preceding-sibling::atom:entry[atom:category/@term=$term.photo])">
         <xsl:text> first</xsl:text>
       </xsl:if>
-      <xsl:if test="not(following-sibling::atom:entry[atom:category/@term='http://schemas.google.com/photos/2007#photo'])">
+      <xsl:if test="not(following-sibling::atom:entry[atom:category/@term=$term.photo])">
         <xsl:text> last</xsl:text>
       </xsl:if>
     </xsl:variable>
@@ -267,7 +283,7 @@
       </xsl:message>
     </xsl:if>
 
-    <xsl:apply-templates select="$photo.feed/atom:feed/atom:entry[atom:category/@term='http://schemas.google.com/photos/2007#photo']/media:group[media:content and media:thumbnail]" 
+    <xsl:apply-templates select="$photo.feed/atom:feed/atom:entry[atom:category/@term=$term.photo]/media:group[media:content and media:thumbnail]" 
                          mode="lightbox"/>
 
   </xsl:template>
@@ -280,104 +296,6 @@
 
 
 
-  <!-- If there's more than one entry, output a member of a list,
-       otherwise just the entry -->
-  <xsl:template match="atom:entry" mode="photolist">
-    <xsl:param name="full.photo.width" select="720" />
-    <xsl:param name="thumbnail.width" select="48" />
-    <xsl:param name="use.lightbox" select="true()" />
-    <xsl:variable name="count" select="count(. | preceding-sibling::atom:entry | following-sibling::atom:entry)" />
-
-    <xsl:choose>
-      <xsl:when test="$count &gt; 1">
-        <d:member>
-          <xsl:call-template name="docbook.photo">
-            <xsl:with-param name="entry" select="." />
-            <xsl:with-param name="use.lightbox" select="$use.lightbox" />
-            <xsl:with-param name="full.photo.width" select="$full.photo.width" />
-            <xsl:with-param name="thumbnail.width" select="$thumbnail.width" />
-          </xsl:call-template>
-        </d:member>
-      </xsl:when>
-      <xsl:when test="$count = 1">
-        <xsl:call-template name="docbook.photo">
-            <xsl:with-param name="entry" select="." />
-            <xsl:with-param name="use.lightbox" select="$use.lightbox" />
-            <xsl:with-param name="full.photo.width" select="$full.photo.width" />
-            <xsl:with-param name="thumbnail.width" select="$thumbnail.width" />
-        </xsl:call-template>
-      </xsl:when>
-      <xsl:otherwise>
-        <xsl:message terminate="yes">
-          Invalid number of entries: <xsl:value-of select="$count" />
-        </xsl:message>
-      </xsl:otherwise>
-
-    </xsl:choose>
-  </xsl:template>
-
-  <xsl:template name="docbook.photo">
-    <xsl:param name="entry" select="." />
-    <xsl:param name="use.lightbox" select="true()" />
-    <xsl:param name="full.photo.width" select="720" />
-    <xsl:param name="thumbnail.width" select="48" />
-    
-    <xsl:variable name="title">
-      <xsl:choose>
-        <xsl:when test="normalize-space($entry/atom:summary)!=''">
-          <xsl:value-of select="normalize-space($entry/atom:summary)" />
-        </xsl:when>
-        <xsl:otherwise>
-          <xsl:choose>
-            <xsl:when test="contains($entry/atom:title, '.jpg')">
-              <xsl:value-of select="substring-before($entry/atom:title, '.jpg')" />
-            </xsl:when>
-            <xsl:when test="contains($entry/atom:title, '.JPG')">
-              <xsl:value-of select="substring-before($entry/atom:title, '.JPG')" />
-            </xsl:when>
-            <xsl:otherwise>
-              <xsl:value-of select="$entry/atom:title" />
-            </xsl:otherwise>
-          </xsl:choose>
-        </xsl:otherwise>
-      </xsl:choose>
-    </xsl:variable>
-
-    <!-- HACK! Using thumbnail.width and full.photo.width to get photos
-    with either width or height which are those values -->
-    <xsl:variable name="photo" select="$entry/media:group/media:thumbnail[@width=$full.photo.width or @height=$full.photo.width]" />
-    <xsl:variable name="thumbnail" select="$entry/media:group/media:thumbnail[@width=$thumbnail.width or @height=$thumbnail.width]" />
-
-    <xsl:choose>
-      <xsl:when test="$use.lightbox">
-        <d:link role="lightboxgrid" xlink:href="{$photo/@url}" xlink:title="{$title}">
-          <xsl:call-template name="inlinemediaobject">
-            <xsl:with-param name="title" select="$title" />
-            <xsl:with-param name="thumbnail" select="$thumbnail" />
-          </xsl:call-template>
-        </d:link>
-      </xsl:when>
-      <xsl:otherwise>
-        <xsl:call-template name="inlinemediaobject">
-          <xsl:with-param name="title" select="$title" />
-          <xsl:with-param name="thumbnail" select="$thumbnail" />
-        </xsl:call-template>
-      </xsl:otherwise>
-    </xsl:choose>
-  </xsl:template>
-
-  <xsl:template name="inlinemediaobject">
-    <xsl:param name="title" select="substring-before(media:title[@type='plain'], '.JPG')" />
-    <xsl:param name="thumbnail" select="media:thumbnail[@width=48]" />
-
-    <d:inlinemediaobject>
-      <d:alt><xsl:value-of select="$title" /></d:alt>
-      <d:textobject><d:phrase><xsl:value-of select="$title" /></d:phrase></d:textobject>
-      <d:imageobject role="html">
-        <d:imagedata width="{$thumbnail/@width}" height="{$thumbnail/@height}" fileref="{$thumbnail/@url}" />
-      </d:imageobject>
-    </d:inlinemediaobject>
-  </xsl:template>
 
   <!-- Process albums for newsfeed. -->
   <xsl:template name="newsfeed">
@@ -431,7 +349,7 @@
     <li class="{normalize-space($class.value)}">
       <xsl:choose>
         <!-- When this is a photo entry, format accordingly. -->
-        <xsl:when test="atom:category[@scheme='http://schemas.google.com/g/2005#kind' and @term='http://schemas.google.com/photos/2007#photo']">
+        <xsl:when test="atom:category[@scheme=$scheme.photo and @term=$term.photo]">
 
           <xsl:variable name="title">
             <xsl:choose>
